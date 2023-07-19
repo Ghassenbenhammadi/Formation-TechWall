@@ -2,7 +2,9 @@
 
 namespace App\Controller;
 
+
 use App\Entity\Personne;
+use App\Repository\PersonneRepository;
 use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
@@ -11,22 +13,36 @@ use Symfony\Component\HttpFoundation\RedirectResponse;
 
 
 
+
+
 #[Route('personne')]
 class PersonneController extends AbstractController
 {
 
-    #[Route('/', name: 'personne.list')]
-    public function index(ManagerRegistry $doctrine): Response {
+    #[Route('/', name: 'personne.index')]
+    public function index(ManagerRegistry $doctrine): Response
+    {
         $repository = $doctrine->getRepository(Personne::class);
         $personnes = $repository->findAll();
+
         return $this->render('personne/index.html.twig', ['personnes' => $personnes]);
     }
 
+    #[Route('/all/age/{ageMin}/{ageMax}', name: 'personne.list.age')]
+    public function personnesByAge(PersonneRepository $repository, $ageMin, $ageMax): Response
+    {
+        $personnes = $repository->startsPersonnesByAgeInterval($ageMax,$ageMin);
+        
+        return $this->render('personne/index.html.twig', ['personnes' => $personnes]);
+    }
+    
+
     #[Route('/{id<\d+>}', name: 'personne.detail')]
-    public function detail(Personne $personne = null): Response {
-        if(!$personne) {
-            $this->addFlash('error', "La personne n'existe pas ");
-            return $this->redirectToRoute('personne.list');
+    public function detail(Personne $personne = null): Response
+    {
+        if (!$personne) {
+            $this->addFlash('error', "La personne n'existe pas");
+            return $this->redirectToRoute('personne.index');
         }
 
         return $this->render('personne/detail.html.twig', ['personne' => $personne]);
@@ -59,11 +75,12 @@ class PersonneController extends AbstractController
     {
         $entityManger = $doctrine->getManager();
         $personne = new Personne();
-        $personne->setFirstname('ghassen');
+        $personne->setFirstname('amin');
         $personne->setName('benhammadi');
-        $personne->setAge('32');
+        $personne->setAge('30');
         $entityManger->persist($personne);
-        return $this->render('detail.html.twig', [
+        $entityManger->flush();
+        return $this->render('personne/detail.html.twig', [
             'personne' => $personne,
         ]);
     }
@@ -82,18 +99,37 @@ public function deletePersonne(ManagerRegistry $doctrine, Personne $personne = n
     return $this->redirectToRoute('personne.list.alls');
 }
 
+    // #[Route('/update/{id}/{name}/{firstname}/{age}', name: 'personne.update')]
+    // public function updatePersonne(Personne $personne = null, ManagerRegistry $doctrine, $name, $firstname, $age){
+    //     if ($personne) {
+    //        $personne->setName($name);
+    //        $personne->setFirstname($firstname);
+    //        $personne->setAge($age);
+    //        $manager = $doctrine->getManager();
+    //        $manager->persist($personne);
+    //        $manager->flush();
+    //        $this->addFlash('success', "la personne a été modifier avec succés");
+    //     } else {
+    //         $this->addFlash('error', "la personne n'exite pas ");
+    //     }
+    //     return $this->redirectToRoute('personne.list.alls');
+    // }
     #[Route('/update/{id}/{name}/{firstname}/{age}', name: 'personne.update')]
-    public function updatePersonne(Personne $personne = null, ManagerRegistry $doctrine, $name, $firstname, $age){
+    public function updatePersonne(Personne $personne = null, ManagerRegistry $doctrine, $name, $firstname, $age) {
+        //Vérifier que la personne à mettre à jour existe
         if ($personne) {
-           $personne->setName($name);
-           $personne->setFirstname($firstname);
-           $personne->setAge($age);
-           $manager = $doctrine->getManager();
-           $manager->persist($personne);
-           $manager->flush();
-           $this->addFlash('success', "la personne a été modifier avec succés");
-        } else {
-            $this->addFlash('error', "la personne n'exite pas ");
+            // Si la personne existe => mettre a jour notre personne + message de succes
+            $personne->setName($name);
+            $personne->setFirstname($firstname);
+            $personne->setAge($age);
+            $manager = $doctrine->getManager();
+            $manager->persist($personne);
+
+            $manager->flush();
+            $this->addFlash('success', "La personne a été mis à jour avec succès");
+        }  else {
+            //Sinon  retourner un flashMessage d'erreur
+            $this->addFlash('error', "Personne innexistante");
         }
         return $this->redirectToRoute('personne.list.alls');
     }
