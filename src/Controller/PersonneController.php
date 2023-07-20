@@ -4,6 +4,7 @@ namespace App\Controller;
 
 
 use App\Entity\Personne;
+use App\Form\PersonneType;
 use App\Repository\PersonneRepository;
 use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -74,14 +75,11 @@ class PersonneController extends AbstractController
     public function addPersonne(ManagerRegistry $doctrine): Response
     {
         $entityManger = $doctrine->getManager();
+       
         $personne = new Personne();
-        $personne->setFirstname('amin');
-        $personne->setName('benhammadi');
-        $personne->setAge('30');
-        $entityManger->persist($personne);
-        $entityManger->flush();
-        return $this->render('personne/detail.html.twig', [
-            'personne' => $personne,
+        $form = $this->createForm(PersonneType::class);
+        return $this->render('personne/add-personne.html.twig', [
+            'form'=>$form->createView()
         ]);
     }
    
@@ -99,21 +97,7 @@ public function deletePersonne(ManagerRegistry $doctrine, Personne $personne = n
     return $this->redirectToRoute('personne.list.alls');
 }
 
-    // #[Route('/update/{id}/{name}/{firstname}/{age}', name: 'personne.update')]
-    // public function updatePersonne(Personne $personne = null, ManagerRegistry $doctrine, $name, $firstname, $age){
-    //     if ($personne) {
-    //        $personne->setName($name);
-    //        $personne->setFirstname($firstname);
-    //        $personne->setAge($age);
-    //        $manager = $doctrine->getManager();
-    //        $manager->persist($personne);
-    //        $manager->flush();
-    //        $this->addFlash('success', "la personne a été modifier avec succés");
-    //     } else {
-    //         $this->addFlash('error', "la personne n'exite pas ");
-    //     }
-    //     return $this->redirectToRoute('personne.list.alls');
-    // }
+
     #[Route('/update/{id}/{name}/{firstname}/{age}', name: 'personne.update')]
     public function updatePersonne(Personne $personne = null, ManagerRegistry $doctrine, $name, $firstname, $age) {
         //Vérifier que la personne à mettre à jour existe
