@@ -8,13 +8,12 @@ use App\Form\PersonneType;
 use App\Repository\PersonneRepository;
 use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\File\Exception\FileException;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\HttpFoundation\RedirectResponse;
-
-
-
-
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\String\Slugger\SluggerInterface;
 
 #[Route('personne')]
 class PersonneController extends AbstractController
@@ -25,6 +24,7 @@ class PersonneController extends AbstractController
     {
         $repository = $doctrine->getRepository(Personne::class);
         $personnes = $repository->findAll();
+        
 
         return $this->render('personne/index.html.twig', ['personnes' => $personnes]);
     }
@@ -71,31 +71,72 @@ class PersonneController extends AbstractController
     }
     
 
-    #[Route('/add', name: 'app_personne.add')]
-    public function addPersonne(ManagerRegistry $doctrine): Response
+    #[Route('/edit/{id?0}', name: 'personne.edit')]
+    public function addPersonne(Personne $personne = null,ManagerRegistry $doctrine,Request $request, SluggerInterface $slugger): Response
     {
+        $new = false;
         $entityManger = $doctrine->getManager();
-       
+       if(!$personne){
+        $new = true;
         $personne = new Personne();
-        $form = $this->createForm(PersonneType::class);
-        return $this->render('personne/add-personne.html.twig', [
-            'form'=>$form->createView()
-        ]);
+       }
+       
+        $form = $this->createForm(PersonneType::class, $personne);
+        // methode pour supprimer deux champs ou directement du form
+        $form->remove('createdAt');
+        $form->remove('updatedAt');
+        // mon formulaire va aller traiter la requete 
+       $form->handleRequest($request);
+       if($form->isSubmitted() && $form->isValid()){
+        $photo = $form->get('photo')->getData();
+        if ($photo) { 
+            $originalFilename = pathinfo($photo->getClientOriginalName(), PATHINFO_FILENAME);
+            $safeFilename = $slugger->slug($originalFilename);
+            $newFilename = $safeFilename.'-'.uniqid().'.'.$photo->guessExtension();
+            try {
+                $photo->move(
+                    $this->getParameter('personne_directory'),
+                    $newFilename
+                );
+            } catch (FileException $e) {
+                
+            }
+            $personne->setImage($newFilename);
+        }
+        $manager = $doctrine->getManager();
+        $manager->persist($personne);
+
+        $manager->flush();
+        if($new){
+            $message = "a été a ajouté avec succés";
+        }else{
+            $message = "a été a modifié avec succés";
+        }
+        $this->addFlash( "succes",$personne->getName(). $message);
+        
+              return $this->redirectToRoute('personne.index');
+        } else{
+            return $this->render('personne/add-personne.html.twig', [
+                'form'=>$form->createView()
+            ]);
+       }
+        
     }
    
     #[Route('/delete/{id}', name: 'personne.delete')]
-public function deletePersonne(ManagerRegistry $doctrine, Personne $personne = null): RedirectResponse {
-    if ($personne) {
-        $manager = $doctrine->getManager();
-        $manager->remove($personne);
-        $manager->flush();
-        $this->addFlash('success', "La personne a été supprimée avec succès");
-    } else {
-        $this->addFlash('error', "La personne n'existe pas");
-    }
+    public function deletePersonne(ManagerRegistry $doctrine, Personne $personne = null): RedirectResponse
+    {
+        if ($personne) {
+            $manager = $doctrine->getManager();
+            $manager->remove($personne);
+            $manager->flush();
+            $this->addFlash('success', "La personne a été supprimée avec succès");
+        } else {
+            $this->addFlash('error', "La personne n'existe pas");
+        }
 
-    return $this->redirectToRoute('personne.list.alls');
-}
+        return $this->redirectToRoute('personne.list.alls');
+    }
 
 
     #[Route('/update/{id}/{name}/{firstname}/{age}', name: 'personne.update')]
