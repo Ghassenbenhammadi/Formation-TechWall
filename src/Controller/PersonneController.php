@@ -4,21 +4,32 @@ namespace App\Controller;
 
 
 use App\Entity\Personne;
+use App\Event\AddPersonneEvent;
+use App\Event\ListAllPersonnesEvent;
 use App\Form\PersonneType;
 use App\Repository\PersonneRepository;
+use App\Service\Helpers;
 use Doctrine\Persistence\ManagerRegistry;
+use Psr\Log\LoggerInterface;
+use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
+use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\File\Exception\FileException;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
+
+
 use Symfony\Component\String\Slugger\SluggerInterface;
 
-#[Route('personne')]
+#[Route('personne'), IsGranted('ROLE_USER')]
 class PersonneController extends AbstractController
 {
-
+public function __construct(
+    private LoggerInterface $logger,
+    private Helpers $helper,
+    private EventDispatcherInterface $dispatcher ){}
     #[Route('/', name: 'personne.index')]
     public function index(ManagerRegistry $doctrine): Response
     {
@@ -33,7 +44,6 @@ class PersonneController extends AbstractController
     public function personnesByAge(PersonneRepository $repository, $ageMin, $ageMax): Response
     {
         $personnes = $repository->startsPersonnesByAgeInterval($ageMax,$ageMin);
-        
         return $this->render('personne/index.html.twig', ['personnes' => $personnes]);
     }
     
@@ -48,7 +58,7 @@ class PersonneController extends AbstractController
 
         return $this->render('personne/detail.html.twig', ['personne' => $personne]);
     }
-
+    #[ IsGranted("ROLE_USER")]
     #[Route('/all/{page?1}/{nbre?12}', name: 'personne.list.alls')]
     public function indexAll(ManagerRegistry $doctrine, $page, $nbre): Response {
         $entityManager = $doctrine->getManager();
@@ -61,6 +71,8 @@ class PersonneController extends AbstractController
     
         $nbrePage = ceil($nbPersonne / $nbre);
         $personnes = $repository->findBy([], [], $nbre, ($page - 1) * $nbre);
+        $listAllPersonneEvent = new ListAllPersonnesEvent(count($personnes));
+        $this->dispatcher->dispatch($listAllPersonneEvent, ListAllPersonnesEvent::LIST_ALL_PERSONNE_EVENT);
         return $this->render('personne/index.html.twig', [
             'personnes' => $personnes,
             'isPaginated' => true,
@@ -74,6 +86,7 @@ class PersonneController extends AbstractController
     #[Route('/edit/{id?0}', name: 'personne.edit')]
     public function addPersonne(Personne $personne = null,ManagerRegistry $doctrine,Request $request, SluggerInterface $slugger): Response
     {
+        $this->denyAccessUnlessGranted('ROLE_ADMIN');
         $new = false;
         $entityManger = $doctrine->getManager();
        if(!$personne){
@@ -107,8 +120,16 @@ class PersonneController extends AbstractController
         $manager->persist($personne);
 
         $manager->flush();
+        if($new) {
+            // creation notre événement
+            $addPersonneEvent = new AddPersonneEvent($personne);
+            // on va dispatcher cet événement
+            $this->dispatcher->dispatch($addPersonneEvent, AddPersonneEvent::ADD_PERSONNE_EVENT);
+        } 
         if($new){
             $message = "a été a ajouté avec succés";
+            $personne->setCreatedBy($this->getUser());
+        
         }else{
             $message = "a été a modifié avec succés";
         }
@@ -123,7 +144,7 @@ class PersonneController extends AbstractController
         
     }
    
-    #[Route('/delete/{id}', name: 'personne.delete')]
+    #[Route('/delete/{id}', name: 'personne.delete'), IsGranted('ROLE_ADMIN')]
     public function deletePersonne(ManagerRegistry $doctrine, Personne $personne = null): RedirectResponse
     {
         if ($personne) {
