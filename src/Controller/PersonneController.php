@@ -9,19 +9,20 @@ use App\Event\ListAllPersonnesEvent;
 use App\Form\PersonneType;
 use App\Repository\PersonneRepository;
 use App\Service\Helpers;
+use App\Service\PdfService;
+use App\Service\UploaderService;
 use Doctrine\Persistence\ManagerRegistry;
 use Psr\Log\LoggerInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\HttpFoundation\File\Exception\FileException;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 
 
-use Symfony\Component\String\Slugger\SluggerInterface;
+
 
 #[Route('personne'), IsGranted('ROLE_USER')]
 class PersonneController extends AbstractController
@@ -38,6 +39,12 @@ public function __construct(
         
 
         return $this->render('personne/index.html.twig', ['personnes' => $personnes]);
+    }
+
+    #[Route('/pdf/{id}', name: 'personne.pdf')]
+    public function generatePdfPersonne(Personne $personne = null, PdfService $pdf) {
+        $html = $this->render('personne/detail.html.twig', ['personne' => $personne]);
+        $pdf->showPdfFile($html);
     }
 
     #[Route('/all/age/{ageMin}/{ageMax}', name: 'personne.list.age')]
@@ -84,11 +91,15 @@ public function __construct(
     
 
     #[Route('/edit/{id?0}', name: 'personne.edit')]
-    public function addPersonne(Personne $personne = null,ManagerRegistry $doctrine,Request $request, SluggerInterface $slugger): Response
+    public function addPersonne(Personne $personne = null,
+        ManagerRegistry $doctrine,
+        Request $request, 
+        UploaderService $uploader
+        ): Response
     {
         $this->denyAccessUnlessGranted('ROLE_ADMIN');
         $new = false;
-        $entityManger = $doctrine->getManager();
+        // $entityManger = $doctrine->getManager();
        if(!$personne){
         $new = true;
         $personne = new Personne();
@@ -103,18 +114,10 @@ public function __construct(
        if($form->isSubmitted() && $form->isValid()){
         $photo = $form->get('photo')->getData();
         if ($photo) { 
-            $originalFilename = pathinfo($photo->getClientOriginalName(), PATHINFO_FILENAME);
-            $safeFilename = $slugger->slug($originalFilename);
-            $newFilename = $safeFilename.'-'.uniqid().'.'.$photo->guessExtension();
-            try {
-                $photo->move(
-                    $this->getParameter('personne_directory'),
-                    $newFilename
-                );
-            } catch (FileException $e) {
-                
-            }
-            $personne->setImage($newFilename);
+           
+            $directory = $this->getParameter('personne_directory');
+            
+            $personne->setImage($uploader->uploadFile($photo, $directory));
         }
         $manager = $doctrine->getManager();
         $manager->persist($personne);
